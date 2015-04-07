@@ -1,6 +1,6 @@
 #! /bin/bash
 
-VERSION="LdapMailSignatureGenerator v 1.0 - 2014 - Yvan GODARD - godardyvan@gmail.com - http://goo.gl/c62RYH"
+VERSION="LdapMailSignatureGenerator v 1.0 - 2014 - Yvan GODARD - godardyvan@gmail.com - http://goo.gl/xr73Mt"
 SCRIPT_DIR=$(dirname $0)
 SCRIPT_NAME=$(basename $0)
 SCRIPT_NAME_WITHOUT_EXT=$(echo "${SCRIPT_NAME}" | cut -f1 -d '.')

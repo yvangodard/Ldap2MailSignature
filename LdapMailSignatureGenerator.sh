@@ -4,6 +4,7 @@ VERSION="LdapMailSignatureGenerator v 1.0 - 2014 - Yvan GODARD - godardyvan@gmai
 SCRIPT_DIR=$(dirname $0)
 SCRIPT_NAME=$(basename $0)
 SCRIPT_NAME_WITHOUT_EXT=$(echo "${SCRIPT_NAME}" | cut -f1 -d '.')
+VERSION_OSX=$(sw_vers -productVersion | awk -F '.' '{print $(NF-1)}')
 LDAP_URL=""
 LDAP_DN_BASE=""
 RACINE=""
@@ -21,6 +22,8 @@ USER_UID=$(whoami)
 HOME_DIR=$(echo ~)
 LOG=${HOME_DIR%/}/Library/logs/${SCRIPT_NAME_WITHOUT_EXT}.log
 DIR_EXPORT=${HOME_DIR%/}/Desktop
+CLEF_IDENTIFIANT=${SCRIPT_NAME_WITHOUT_EXT}
+VERBOSITY=1
 # Fichier temp
 LOG_TEMP=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}.XXXXX)
 TEMP_IP=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_tempip.XXXXX)
@@ -85,6 +88,7 @@ function error () {
 	# 5 Pas de correspondance pour ce domaine
 	# 6 Fichier source modèle inexistant
 	# 7 Autre erreur
+	# 8 Conflit entre plusieurs anciennes signatures. Utilisez -v 1 pour augmenter la verbosité et voir quels sont ces fichiers.
 	echo -e "\n*** Erreur ${1} ***"
 	echo -e ${2}
 	alldone ${1}
@@ -100,15 +104,7 @@ function alldone () {
 		cat ${LOG_TEMP}
 	fi
 	# Suppression des fichiers et répertoires temporaires
-	[ -f ${LOG_TEMP} ] && rm -r ${LOG_TEMP}
-	[ -f ${TEMP_IP} ] && rm -r ${TEMP_IP}
-	[ -f ${CONTENT_USER} ] && rm -r ${CONTENT_USER}
-	[ -f ${LISTE_MOBILE} ] && rm -r ${LISTE_MOBILE}
-	[ -f ${LISTE_TEL} ] && rm -r ${LISTE_TEL}
-	[ -f ${LISTE_MAIL} ] && rm -r ${LISTE_MAIL}
-	[ -f ${LISTE_SKYPE} ] && rm -r ${LISTE_SKYPE}
-	[ -f ${LISTE_IP} ] && rm -r ${LISTE_IP}
-	[ -f ${CONTENT_USER_BASE} ] && rm -r ${CONTENT_USER_BASE}
+	rm -R /tmp/${SCRIPT_NAME_WITHOUT_EXT}*
 	exit ${1}
 }
 
@@ -193,7 +189,7 @@ echo -e "\n****************************** `date` ******************************\
 echo -e "$0 démarré..."
 
 # Par sécurité, attendons quelques instants
-# sleep 5
+sleep 3
 
 # Testons si une connection internet est ouverte
 dig +short myip.opendns.com @resolver1.opendns.com > /dev/null 2>&1
@@ -233,8 +229,16 @@ ${LDAP_COMMAND_BEGIN} -b ${LDAP_DN_USER_BRANCH},${LDAP_DN_BASE} > /dev/null 2>&1
 [[ ! -d ${DIR_EXPORT} ]] && error 7 "Problème pour accéder au répertoire '${DIR_EXPORT}'."
 [[ ! -w ${DIR_EXPORT} ]] && error 7 "Problème de droits d'accès en écriture au dossier ${DIR_EXPORT}'."
 
+
+################################################################################
+# ETAPE 1 : Export variables depuis LDAP
+################################################################################
+
 # Récupérer les variables nécessaires
 ${LDAP_COMMAND_BEGIN} -b ${LDAP_DN_USER_BRANCH},${LDAP_DN_BASE} -x uid=${USER_UID} givenName sn cn title telephoneNumber mobile mail apple-company street postalCode l c apple-imhandle > ${CONTENT_USER_BASE}
+
+# Correction to support LDIF splitted lines, thanks to Guillaume Bougard (gbougard@pkg.fr)
+perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${CONTENT_USER_BASE}"
 
 # Décodage des informations
 OLDIFS=$IFS; IFS=$'\n'
@@ -244,7 +248,7 @@ do
 done
 IFS=$OLDIFS
 
-# Récupération des données
+# Récupération des données depuis le LDAP
 NOMCOMPLET=$(cat ${CONTENT_USER} | grep ^cn: | perl -p -e 's/cn: //g')
 NOM=$(cat ${CONTENT_USER} | grep ^sn: | perl -p -e 's/sn: //g')
 PRENOM=$(cat ${CONTENT_USER} | grep ^givenName: | perl -p -e 's/givenName: //g')
@@ -361,9 +365,44 @@ done
 MOBILE=$(cat ${LISTE_MOBILE} | perl -p -e 's/\n/ - /g' | awk 'sub( "...$", "" )')
 IFS=$OLDIFS
 
-# NOUVEAU_NOM
-# NOUVEAU_NOM="$(uuidgen).mailsignature"
-NOUVEAU_NOM="55B4D73D-2C98-4A32-90BF-B6451D8342BC.mailsignature"
+################################################################################
+# ETAPE 2 : Recherche et suppression des signatures équivalentes antérieures
+################################################################################
+
+# Définition de l'emplacement des signatures et du format
+EMPLACEMENT_SIGNATURES=${HOME_DIR%/}/Library/Mail/V2/MailData/Signatures
+LISTE_ANCIENNES_SIGNATURES=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_anciennes_signatures.XXXXX)
+NOMBRE_SIGANTURES_ANCIENNES=0
+[[ ${VERBOSITY} -eq "1" ]] && echo -e "\nNous allons rechercher '${CLEF_IDENTIFIANT} ${MAIL}' dans les signatures pour identifier si une siganture a déjà été générée par ${SCRIPT_NAME}."
+for SIGNATURE in $(find ${EMPLACEMENT_SIGNATURES%/}/ -name "*.mailsignature" -depth 1 -print)
+do
+	[[ ${VERBOSITY} -eq "1" ]] && echo "${SIGNATURE}"
+	GENERATED_BY_THIS_SCRIPT=0
+	grep "${CLEF_IDENTIFIANT} ${MAIL}" ${SIGNATURE} > /dev/null 2>&1
+	[[ $? -eq 0 ]] && echo "${SIGNATURE}" >> ${LISTE_ANCIENNES_SIGNATURES} && let NOMBRE_SIGANTURES_ANCIENNES=${NOMBRE_SIGANTURES_ANCIENNES}+1
+done
+
+[[ ${VERBOSITY} -eq "1" ]] && [[ ${NOMBRE_SIGANTURES_ANCIENNES} -ne "0" ]] && echo -e "\nListe ancienne(s) signature(s) :" && cat ${LISTE_ANCIENNES_SIGNATURES}
+[[ ${VERBOSITY} -eq "1" ]] && [[ ${NOMBRE_SIGANTURES_ANCIENNES} -eq "0" ]] && echo -e "\nPas d'ancienne signature correspondante trouvée." 
+
+
+# Définition du nom de fichier
+if [[ ${NOMBRE_SIGANTURES_ANCIENNES} -eq "0" ]]; then
+	# On évite d'écraser un autre fichier
+	NOM_OK=0
+	until [[ ${NOM_OK} -eq "1" ]]
+	do
+		UUID=$(uuidgen)
+		NOUVEAU_NOM="${UUID}.mailsignature"
+		[[ ! -e ${EMPLACEMENT_SIGNATURES%/}/${NOUVEAU_NOM} ]] && NOM_OK=1
+	done
+elif [[ ${NOMBRE_SIGANTURES_ANCIENNES} -eq "1" ]]; then
+	NOUVEAU_NOM="$(echo $(basename $(cat ${LISTE_ANCIENNES_SIGNATURES})))"
+elif [[ ${NOMBRE_SIGANTURES_ANCIENNES} -gt "1" ]]; then
+	error 8 "Conflit entre plusieurs anciennes signatures. Utilisez si besoin -v 1 pour augmenter la verbosité et voir quels sont ces fichiers."
+fi
+[[ ${VERBOSITY} -eq "1" ]] && echo -e "\nNom de fichier de la siganture générée :" && echo "${NOUVEAU_NOM}"
+
 cp ${MODELE} ${DIR_EXPORT%/}/${NOUVEAU_NOM}
 cd ${DIR_EXPORT%/}
 
@@ -409,21 +448,32 @@ if [[ ! -z ${COMPANY} ]]; then
 elif [[ -z ${COMPANY} ]]; then
 	cat ${NOUVEAU_NOM} | sed "s/LIGNE4/Réseau en scène Languedoc-Roussillon/g" > ${NOUVEAU_NOM}.new && mv ${NOUVEAU_NOM} ${NOUVEAU_NOM}.old && mv ${NOUVEAU_NOM}.new ${NOUVEAU_NOM} && rm ${NOUVEAU_NOM}.old
 fi
+echo -e "\n<!-- ${CLEF_IDENTIFIANT} ${MAIL} -->" >> ${NOUVEAU_NOM}
 
+################################################################################
+# ETAPE 3 : Générons le fichier de signature
+################################################################################
 
+[[ ${VERBOSITY} -eq "1" ]] && echo -e "\nContenu de la signature générée :" && cat ${NOUVEAU_NOM}
 
-# TEST
-cat ${NOUVEAU_NOM}
-
-if [[ -f ~/Library/Mail/V2/MailData/Signatures/${NOUVEAU_NOM} ]]; then
-	chflags -R nouchg ~/Library/Mail/V2/MailData/Signatures/${NOUVEAU_NOM}
-	rm -R ~/Library/Mail/V2/MailData/Signatures/${NOUVEAU_NOM}
+if [[ -f ${EMPLACEMENT_SIGNATURES%/}/${NOUVEAU_NOM} ]]; then
+	chflags -R nouchg ${EMPLACEMENT_SIGNATURES%/}/${NOUVEAU_NOM}
+	rm -R ${EMPLACEMENT_SIGNATURES%/}/${NOUVEAU_NOM}
 fi 
-mv ${NOUVEAU_NOM} ~/Library/Mail/V2/MailData/Signatures/
-chflags uchg ~/Library/Mail/V2/MailData/Signatures/${NOUVEAU_NOM}
+mv ${NOUVEAU_NOM} ${EMPLACEMENT_SIGNATURES%/}/
+chflags uchg ${EMPLACEMENT_SIGNATURES%/}/${NOUVEAU_NOM}
 
-[[ $(ps -Av | grep -i Mail.app | sed "/grep -i Mail.app/d" | wc -l) -gt 0 ]] && killall Mail && open -a Mail
+################################################################################
+# ETAPE 4 : Fichiers XML
+################################################################################
 
-cd ~
+UUID_SIGNTAURES_ENREGISTREES=$(xmllint --xpath '/plist/array/dict/string' ${EMPLACEMENT_SIGNATURES%/}/AllSignatures.plist | perl -p -e 's/<string>//g' | perl -p -e 's/<\/string>/\n/g' | grep '^[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*$')
+echo "${NOUVEAU_NOM%.mailsignature}" 
+# Si la signature n'est pas enregistrée, on l'ajout
+
+
+[[ $(ps -Av | grep -i Mail.app | sed "/grep -i Mail.app/d" | wc -l) -gt 0 ]] && killall Mail && sleep 3 && open -a Mail
+
+cd ${HOME_DIR%/}
 
 alldone 0

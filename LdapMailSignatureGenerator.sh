@@ -1,55 +1,79 @@
 #! /bin/bash
 
-VERSION="LdapMailSignatureGenerator v 1.0 - 2014 - Yvan GODARD - godardyvan@gmail.com - http://goo.gl/xr73Mt"
-SCRIPT_DIR=$(dirname $0)
-SCRIPT_NAME=$(basename $0)
-SCRIPT_NAME_WITHOUT_EXT=$(echo "${SCRIPT_NAME}" | cut -f1 -d '.')
-VERSION_OSX=$(sw_vers -productVersion | awk -F '.' '{print $(NF-1)}')
-LDAP_URL=""
-LDAP_DN_BASE=""
-RACINE=""
-MODELE=""
-WITH_LDAP_BIND="no"
-LDAP_ADMIN_UID=""
-LDAP_ADMIN_PASS=""
-LDAP_DN_USER_BRANCH="cn=users"
-FILTER_ON_DOMAIN=""
-DOMAIN_EMAIL=""
-IP_FILTER=0
-HELP="no"
-LOG_ACTIVE=0
-USER_UID=$(whoami)
-HOME_DIR=$(echo ~)
-LOG=${HOME_DIR%/}/Library/logs/${SCRIPT_NAME_WITHOUT_EXT}.log
-DIR_EXPORT=${HOME_DIR%/}/Desktop
-CLEF_IDENTIFIANT=${SCRIPT_NAME_WITHOUT_EXT}
-VERBOSITY=1
+version="LdapMailSignatureGenerator v 1.0 - 2019 - Yvan GODARD - godardyvan@gmail.com - http://goo.gl/xr73Mt"
+scriptDir=$(dirname $0)
+scriptName=$(basename $0)
+scriptNameWithoutExt=$(echo "${scriptName}" | cut -f1 -d '.')
+versionOsX=$(sw_vers -productVersion | awk -F '.' '{print $(NF-1)}')
+ldapUrl=""
+ldapDnBase=""
+racine=""
+modele=""
+withLdapBind="no"
+ldapAdminUid=""
+ldapAdminPass=""
+ldapDnUserBranch="cn=users"
+filterOnDomain=""
+domainEmail=""
+userUid=$(basename ~)
+ipFilter=0
+help="no"
+logActive=0
+homeDir=$(echo ~)
+log=${homeDir%/}/Library/logs/${scriptNameWithoutExt}.log
+dirExport=${homeDir%/}/Desktop
+clefIdentifiant=${scriptNameWithoutExt}
+verbosity=0
+modeMapping="none"
+nombreAnciennesSignatures=0
 # Fichier temp
-LOG_TEMP=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}.XXXXX)
-TEMP_IP=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_tempip.XXXXX)
-LISTE_IP=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_listeIP.XXXXX)
-CONTENT_USER=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_fiche.XXXXX)
-CONTENT_USER_BASE=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_fiche_decode.XXXXX)
-LISTE_MAIL=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_mail.XXXXX)
-LISTE_TEL=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_tel.XXXXX)
-LISTE_MOBILE=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_mobile.XXXXX)
-LISTE_SKYPE=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_skype.XXXXX)
+logTemp=$(mktemp /tmp/${scriptNameWithoutExt}.XXXXX)
+tempIp=$(mktemp /tmp/${scriptNameWithoutExt}_tempip.XXXXX)
+listeIp=$(mktemp /tmp/${scriptNameWithoutExt}_listeIP.XXXXX)
+contentUser=$(mktemp /tmp/${scriptNameWithoutExt}_fiche.XXXXX)
+contentUserBase=$(mktemp /tmp/${scriptNameWithoutExt}_fiche_decode.XXXXX)
+listeMail=$(mktemp /tmp/${scriptNameWithoutExt}_mail.XXXXX)
+listeTel=$(mktemp /tmp/${scriptNameWithoutExt}_tel.XXXXX)
+listeMobile=$(mktemp /tmp/${scriptNameWithoutExt}_mobile.XXXXX)
+listeSkype=$(mktemp /tmp/${scriptNameWithoutExt}_skype.XXXXX)
+listeAnciennesSignatures=$(mktemp /tmp/${scriptNameWithoutExt}_anciennes_signatures.XXXXX)
+# variables dépendantes de l'OS
+[[ ${versionOsX} -eq 8 ]] && mimeVersion="Mime-Version: 1.0 (Mac OS X Mail 6.0 \(1485\))"
+[[ ${versionOsX} -eq 9 ]] && mimeVersion="Mime-Version: 1.0 (Mac OS X Mail 6.0 \(1485\))"
+[[ ${versionOsX} -eq 10 ]] && mimeVersion="Mime-Version: 1.0 (Mac OS X Mail 8.2 \(2070.6\))"
+[[ ${versionOsX} -eq 11 ]] && mimeVersion="Mime-Version: 1.0 (Mac OS X Mail 9.0 \(3054\))"
+[[ ${versionOsX} -eq 12 ]] && mimeVersion="Mime-Version: 1.0 (Mac OS X Mail 9.0 \(3093\))"
+[[ ${versionOsX} -eq 13 ]] && mimeVersion="Mime-version: 1.0 (Mac OS X Mail 11.5 \(3445.9.1\))"
+[[ ${versionOsX} -eq 14 ]] && mimeVersion="Mime-version: 1.0 (Mac OS X Mail 12.0 \(3445.100.39\))"
+[[ ${versionOsX} -eq 15 ]] && mimeVersion="Mime-version: 1.0 (Mac OS X Mail 12.0 \(3445.100.39\))"
+# Définition de l'emplacement des signatures et du format
+[[ ${versionOsX} -eq 8 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V2/MailData/Signatures
+[[ ${versionOsX} -eq 9 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V2/MailData/Signatures
+[[ ${versionOsX} -eq 10 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V2/MailData/Signatures
+[[ ${versionOsX} -eq 11 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V3/MailData/Signatures
+[[ ${versionOsX} -eq 12 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V4/MailData/Signatures
+[[ ${versionOsX} -eq 13 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V5/MailData/Signatures
+[[ ${versionOsX} -eq 14 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V6/MailData/Signatures
+[[ ${versionOsX} -eq 15 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V6/MailData/Signatures
+# Définition de l'emplacement du plist général de Mail
+[[ ${versionOsX} -eq 13 ]] && plistFileMail=${homeDir%/}/Library/Containers/com.apple.mail/Data/Library/Preferences/com.apple.mail.plist
+[[ ${versionOsX} -eq 14 ]] && plistFileMail=${homeDir%/}/Library/Containers/com.apple.mail/Data/Library/Preferences/com.apple.mail.plist
 
 help () {
-	echo -e "$VERSION\n"
+	echo -e "$version\n"
 	echo -e "Cet outil permet de personnaliser un template de siganture Mail.app en utilisant des informations issues d'un serveur LDAP."
 	echo -e "Cet outil est placé sous la licence Creative Commons 4.0 BY NC SA."
 	echo -e "\nAvertissement:"
 	echo -e "Cet outil est distribué dans support ou garantie, la responsabilité de l'auteur ne pourrait être engagée en cas de dommage causé à vos données."
 	echo -e "\nUtilisation:"
-	echo -e "./${SCRIPT_NAME} [-h] | -s <URL Serveur LDAP> -r <DN Racine>"
+	echo -e "./${scriptName} [-h] | -s <URL Serveur LDAP> -r <DN Racine>"
 	echo -e "                                      -t <template signature>" 
 	echo -e "                                      [-a <LDAP admin UID>] [-p <LDAP admin password>]"
 	echo -e "                                      [-u <DN relatif branche Users>]"
 	echo -e "                                      [-D <filtre domaine email>] [-d <domaine email prioritaire>]"
-	echo -e "                                      [-U <UID de l'utilisateur à traiter>]"
+	echo -e "                                      [-U <UID de l'utilisateur à traiter>] [-e <mode mapping>]"
 	echo -e "                                      [-i <IP depuis lesquelles lancer le processus>]"
-	echo -e "                                      [-P <chemin export>] [-j <log file>]"
+	echo -e "                                      [-P <chemin export>] [-j <log file>] [-v <verbosité>]"
 	echo -e "\n\t-h:                                   Affiche cette aide et quitte."
 	echo -e "\nParamètres obligatoires :"
 	echo -e "\t-r <DN Racine> :                      DN de base de l'ensemble des entrées du LDAP (ex. : 'dc=server,dc=office,dc=com')."
@@ -62,22 +86,31 @@ help () {
 	echo -e "\t-p <LDAP admin password> :            Mot de passe de l'utilisateur si un Bind est nécessaire pour consulter"
 	echo -e "\t                                      l'annuaire (sera demandé si absent)."
 	echo -e "\t-u <DN relatif branche Users> :       DN relatif de la branche Users du LDAP"
-	echo -e "\t                                      (ex. : 'cn=allusers', par défaut : '${LDAP_DN_USER_BRANCH}')"
+	echo -e "\t                                      (ex. : 'cn=allusers', par défaut : '${ldapDnUserBranch}')"
 	echo -e "\t-D <filtre domaine email> :           L'utilisation de ce paramètre permet de restreindre la processus aux utilisateurs"
 	echo -e "\t                                      du LDAP disposant d'une adresse email contenant un domaine, sans le '@'"
 	echo -e "\t                                      (ex. : '-D mondomaine.fr' ou '-D serveur.mail.domaine.fr')."
 	echo -e "\t-d <domaine email prioritaire> :      Permet de n'exporter que les adresses email contenant le domaine, sans le '@'"
 	echo -e "\t                                      (ex. : '-d mondomaine.fr' ou '-d serveur.mail.domaine.fr')."
 	echo -e "\t-U <UID de l'utilisateur à traiter> : Utilisateur à rechercher dans le LDAP pour créer un template personnalisé,"
-	echo -e "\t                                      par défaut l'UID suivant est utilisé : ${USER_UID}"
+	echo -e "\t                                      par défaut l'UID suivant est utilisé : ${userUid}"
+	echo -e "\t-e <mode mapping> :                   Mode de mapping de la signature créée avec les comptes emails [none|all|ALL|uid|UID]: "
+	echo -e "\t                                      - e none : option sélectionnée par défaut, la siganture n'est affectée à aucun compte email,"
+	echo -e "\t                                      - e all : ajout sur tous les comptes,"
+	echo -e "\t                                      - e ALL : ajout sur tous les comptes, avec signature sélectionnée par défaut,"
+	echo -e "\t                                      - e uid : ajout sur tous les comptes email correspondants à l'UID,"
+	echo -e "\t                                      - e UID : ajout signature par défaut sur tous les comptes email correspondants à l'UID."
 	echo -e "\t-i <IP> :                             Utiliser cette option pour restreindre le lancement de la commande"
 	echo -e "\t                                      uniquement depuis certaines adresse IP, séparées par le caractère '%'"
 	echo -e "\t                                      (ex. : '123.123.123.123%12.34.56.789')"
 	echo -e "\t-P <chemin export> :                  Chemin complet du dossier vers lequel exporter le résultat"
-	echo -e "\t                                      (ex. : '~/Desktop/' ou '/var/templatesoffice/', par défaut : '${STANDARD_DIR_EXPORT}'"
+	echo -e "\t                                      (ex. : '~/Desktop/' ou '/var/templatesmail/', par défaut : '${STANDARD_dirExport}'"
 	echo -e "\t-j <fichier Log> :                    Assure la journalisation dans un fichier de log à renseigner en paramètre."
-	echo -e "\t                                      (ex. : '${LOG}')"
-	echo -e "\t                                      ou utilisez 'default' (${LOG})"
+	echo -e "\t                                      (ex. : '${log}')"
+	echo -e "\t                                      ou utilisez 'default' (${log})"
+	echo -e "\t-v <verbosité> :                      Réglage du niveau de verbosité du script. Par défaut, 0."
+	echo -e "\t                                      Pour obtenir davantage de retours dans votre console ou votre log,"
+	echo -e "\t                                      utilisez '-v 1'."
 }
 
 function error () {
@@ -89,6 +122,7 @@ function error () {
 	# 6 Fichier source modèle inexistant
 	# 7 Autre erreur
 	# 8 Conflit entre plusieurs anciennes signatures. Utilisez -v 1 pour augmenter la verbosité et voir quels sont ces fichiers.
+	# 9 Dossier de destination impossible à créer
 	echo -e "\n*** Erreur ${1} ***"
 	echo -e ${2}
 	alldone ${1}
@@ -97,14 +131,17 @@ function error () {
 function alldone () {
 	# Journalisation si nécessaire et redirection de la sortie standard
 	[ ${1} -eq 0 ] && echo "" && echo ">>> Processus terminé OK !"
-	if [ ${LOG_ACTIVE} -eq 1 ]; then
+	if [ ${logActive} -eq 1 ]; then
 		exec 1>&6 6>&-
-		[[ ! -f ${LOG} ]] && touch ${LOG}
-		cat ${LOG_TEMP} >> ${LOG}
-		cat ${LOG_TEMP}
+		[[ ! -f ${log} ]] && touch ${log}
+		cat ${logTemp} >> ${log}
+		cat ${logTemp}
 	fi
+	chflags uchg ${allSignaturesPlistFile}
+	chflags uchg ${accountSignaturesMapPlist}
+	chflags uchg ${plistFileMail}
 	# Suppression des fichiers et répertoires temporaires
-	rm -R /tmp/${SCRIPT_NAME_WITHOUT_EXT}*
+	rm -R /tmp/${scriptNameWithoutExt}*
 	exit ${1}
 }
 
@@ -113,50 +150,136 @@ function base64decode () {
 	echo ${1} | grep :: > /dev/null 2>&1
 	if [ $? -eq 0 ] 
 		then
-		VALUE=$(echo ${1} | grep :: | awk '{print $2}' | openssl enc -base64 -d )
-		ATTRIBUTE=$(echo ${1} | grep :: | awk '{print $1}' | awk 'sub( ".$", "" )' )
-		echo "${ATTRIBUTE} ${VALUE}"
+		value=$(echo ${1} | grep :: | awk '{print $2}' | openssl enc -base64 -d )
+		attribute=$(echo ${1} | grep :: | awk '{print $1}' | awk 'sub( ".$", "" )' )
+		echo "${attribute} ${value}"
 	else
 		echo ${1}
 	fi
 }
 
+# Encodage des accents en HTML
+function htmlEncode () {
+	cat ${1} | \
+	sed 's/à/\&agrave;/' | \
+	sed 's/À/\&Agrave;/' | \
+	sed 's/á/\&aacute;/' | \
+	sed 's/Á/\&Aacute;/' | \
+	sed 's/â/\&acirc;/' | \
+	sed 's/Â/\&Acirc;/' | \
+	sed 's/ã/\&atilde;/' | \
+	sed 's/Ã/\&Atilde;/' | \
+	sed 's/ä/\&auml;/' | \
+	sed 's/Ä/\&Auml;/' | \
+	sed 's/å/\&aring;/' | \
+	sed 's/Å/\&Aring;/' | \
+	sed 's/æ/\&aelig;/' | \
+	sed 's/Æ/\&AElig;/' | \
+	sed 's/è/\&egrave;/' | \
+	sed 's/È/\&Egrave;/' | \
+	sed 's/é/\&eacute;/' | \
+	sed 's/É/\&Eacute;/' | \
+	sed 's/ê/\&ecirc;/' | \
+	sed 's/Ê/\&Ecirc;/' | \
+	sed 's/ë/\&euml;/' | \
+	sed 's/Ë/\&Euml;/' | \
+	sed 's/ì/\&igrave;/' | \
+	sed 's/Ì/\&Igrave;/' | \
+	sed 's/í/\&iacute;/' | \
+	sed 's/Í/\&Iacute;/' | \
+	sed 's/î/\&icirc;/' | \
+	sed 's/Î/\&Icirc;/' | \
+	sed 's/ï/\&iuml;/' | \
+	sed 's/Ï/\&Iuml;/' | \
+	sed 's/ò/\&ograve;/' | \
+	sed 's/Ò/\&Ograve;/' | \
+	sed 's/ó/\&oacute;/' | \
+	sed 's/Ó/\&Oacute;/' | \
+	sed 's/ô/\&ocirc;/' | \
+	sed 's/Ô/\&Ocirc;/' | \
+	sed 's/õ/\&otilde;/' | \
+	sed 's/Õ/\&Otilde;/' | \
+	sed 's/ö/\&ouml;/' | \
+	sed 's/Ö/\&Ouml;/' | \
+	sed 's/ø/\&oslash;/' | \
+	sed 's/Ø/\&Oslash;/' | \
+	sed 's/ù/\&ugrave;/' | \
+	sed 's/Ù/\&Ugrave;/' | \
+	sed 's/ú/\&uacute;/' | \
+	sed 's/Ú/\&Uacute;/' | \
+	sed 's/û/\&ucirc;/' | \
+	sed 's/Û/\&Ucirc;/' | \
+	sed 's/ü/\&uuml;/' | \
+	sed 's/Ü/\&Uuml;/' | \
+	sed 's/ñ/\&ntilde;/' | \
+	sed 's/Ñ/\&Ntilde;/' | \
+	sed 's/ç/\&ccedil;/' | \
+	sed 's/Ç/\&Ccedil;/' | \
+	sed 's/ý/\&yacute;/' | \
+	sed 's/Ý/\&Yacute;/' | \
+	sed 's/ß/\&szlig;/'
+}
+
+# Fonction de test pour vérifier si Mail.app est ouvert et le quitter automatiquement
+function testMailOpenAndQuit {
+	# On teste si Mail.app est ouvert et on quitte le cas échéant
+	ps cax | grep Mail$ > /dev/null 2>&1 ; codeRetour=$(echo $?)
+	if [[ ${codeRetour} -eq "0" ]]; then
+		[[ ${verbosity} -eq "1" ]] && echo -e "\nMail.app est ouvert, nous quittons avant de poursuivre."
+		while [[ ${codeRetour} -eq "0" ]]
+		do
+			pidMail=$(ps cax | grep Mail$ | grep -o '^[ ]*[0-9]*' | tr -d '\r\n' | sed "s/ //g")
+		    kill ${pidMail}
+		    sleep 1
+		    ps cax | grep Mail$ > /dev/null 2>&1 ; codeRetour=$(echo $?)
+		done
+	fi
+}
+
 # Vérification des options/paramètres du script 
 optsCount=0
-while getopts "hr:s:t:a:p:u:D:d:i:P:j:U:" OPTION
+while getopts "hr:s:t:a:p:u:D:d:e:i:P:j:U:v:" OPTION
 do
 	case "$OPTION" in
-		h)	HELP="yes"
+		h)	help="yes"
 						;;
-		r)	LDAP_DN_BASE=${OPTARG}
+		r)	ldapDnBase=${OPTARG}
 			let optsCount=$optsCount+1
 						;;
-	    s) 	LDAP_URL=${OPTARG}
+	    s) 	ldapUrl=${OPTARG}
 			let optsCount=$optsCount+1
 						;;
-	    t) 	MODELE=${OPTARG}
+	    t) 	modele=${OPTARG}
 			let optsCount=$optsCount+1
 						;;
-		a)	LDAP_ADMIN_UID=${OPTARG}
-			[[ ${LDAP_ADMIN_UID} != "" ]] && WITH_LDAP_BIND="yes"
+		a)	ldapAdminUid=${OPTARG}
+			[[ ${ldapAdminUid} != "" ]] && withLdapBind="yes"
 						;;
-		p)	LDAP_ADMIN_PASS=${OPTARG}
+		p)	ldapAdminPass=${OPTARG}
                         ;;
-		u) 	LDAP_DN_USER_BRANCH=${OPTARG}
+		u) 	ldapDnUserBranch=${OPTARG}
 						;;
-		D)	FILTER_ON_DOMAIN=${OPTARG}
+		D)	filterOnDomain=${OPTARG}
                         ;;
-		d)	DOMAIN_EMAIL=${OPTARG}
+		d)	domainEmail=${OPTARG}
                         ;;
-        U)	USER_UID=${OPTARG}
-                        ;;
-		i)	[[ ! -z ${OPTARG} ]] && echo ${OPTARG} | perl -p -e 's/%/\n/g' | perl -p -e 's/ //g' | awk '!x[$0]++' >> $LISTE_IP
-			IP_FILTER=1
-                        ;;
-        P) [[ ! -z ${OPTARG} ]] && DIR_EXPORT=${OPTARG%/}
+        U)	if [[ ! -z ${OPTARG} ]]; then
+				userUid=${OPTARG}
+			else
+				userUid=$(basename ~)
+			fi
 						;;
-        j)	[ $OPTARG != "default" ] && LOG=${OPTARG}
-			LOG_ACTIVE=1
+		e)	modeMapping=${OPTARG}
+						;;				
+		i)	[[ ! -z ${OPTARG} ]] && echo ${OPTARG} | perl -p -e 's/%/\n/g' | perl -p -e 's/ //g' | awk '!x[$0]++' >> ${listeIp}
+			ipFilter=1
+                        ;;
+        P) 	[[ ! -z ${OPTARG} ]] && dirExport=${OPTARG%/}
+						;;
+        j)	[ $OPTARG != "default" ] && log=${OPTARG}
+			logActive=1
+                        ;;
+        v) 	verbosity=${OPTARG}
                         ;;
 	esac
 done
@@ -167,22 +290,22 @@ if [[ ${optsCount} != "3" ]]
         error 7 "Les paramètres obligatoires n'ont pas été renseignés."
 fi
 
-if [[ ${HELP} = "yes" ]]
+if [[ ${help} = "yes" ]]
 	then
 	help
 fi
 
-if [[ ${WITH_LDAP_BIND} = "yes" ]] && [[ ${LDAP_ADMIN_PASS} = "" ]]
+if [[ ${withLdapBind} = "yes" ]] && [[ ${ldapAdminPass} = "" ]]
 	then
-	echo "Entrez le mot de passe LDAP pour uid=$LDAP_ADMIN_UID,$LDAP_DN_USER_BRANCH,$LDAP_DN_BASE :" 
-	read -s LDAP_ADMIN_PASS
+	echo "Entrez le mot de passe LDAP pour uid=${ldapAdminUid},${ldapDnUserBranch},${ldapDnBase} :" 
+	read -s ldapAdminPass
 fi
 
 # Redirection de la sortie strandard vers le fichier de log
-if [ $LOG_ACTIVE -eq 1 ]; then
+if [ ${logActive} -eq 1 ]; then
 	echo -e "\n >>> Please wait ... >>> Merci de patienter ..."
 	exec 6>&1
-	exec >> ${LOG_TEMP}
+	exec >> ${logTemp}
 fi
 
 echo -e "\n****************************** `date` ******************************\n"
@@ -191,108 +314,121 @@ echo -e "$0 démarré..."
 # Par sécurité, attendons quelques instants
 sleep 3
 
+# Testons si le paramètre de verbosité est correct
+if [[ ${verbosity} -ne 0 ]] && [[ ${verbosity} -ne 1 ]]; then
+	echo -e "\nVous avez sélectionnée l'option \"-v ${verbosity}\" hors \"-v ${verbosity}\" n'est pas un paramètre autorisé."
+	echo -e "L'option -v n'accepte que les valeurs \"-v 0\" ou \"-v 1\"."
+	echo -e "Pour ne pas interrompre l'usage du script, nous continuons avec le niveau de verbosité maximum, soit \"-v 1\"."
+fi
+
 # Testons si une connection internet est ouverte
 dig +short myip.opendns.com @resolver1.opendns.com > /dev/null 2>&1
 [ $? -ne 0 ] && error 1 "Non connecté à internet."
 
-# Récupérons notre IP dans un fichier temporaire
-TEST_CONNECT=$(dig +short myip.opendns.com @resolver1.opendns.com)
-echo ${TEST_CONNECT} > $TEMP_IP
-echo "Adresse IP actuelle :"
-cat ${TEMP_IP}
+curl -s ifconfig.me > ${tempIp}
+echo -e "\nAdresse IP actuelle : $(cat ${tempIp})"
 
 # Testons si nous sommes connectés sur un réseau ayant pour IP Publique une IP autorisée
-if [[ ${IP_FILTER} -ne 0 ]]; then
-	IP_OK=O
-	for IP in $(cat ${LISTE_IP})
+if [[ ${ipFilter} -ne 0 ]]; then
+	ipOk=O
+	for IP in $(cat ${listeIp})
 	do
-		TEST_GREP=$(grep -c "$IP" ${TEMP_IP})
-		[ $TEST_GREP -eq 1 ] && let IP_OK=$IP_OK+1 && echo "Connecté au réseau autorisé sur l'IP publique "$(cat ${TEMP_IP})"."
+		TEST_GREP=$(grep -c "$IP" ${tempIp})
+		[ $TEST_GREP -eq 1 ] && let ipOk=$ipOk+1 && echo "Connecté au réseau autorisé sur l'IP publique "$(cat ${tempIp})"."
 	done
-	[[ ${IP_OK} -eq 0 ]] && error 2 "Connecté à internet hors du réseau local."
+	[[ ${ipOk} -eq 0 ]] && error 2 "Connecté à internet hors du réseau local."
 fi
 
 # Test connection LDAP
-echo -e "\nConnecting LDAP at $LDAP_URL..."
-[[ ${WITH_LDAP_BIND} = "no" ]] && LDAP_COMMAND_BEGIN="ldapsearch -LLL -H ${LDAP_URL} -x"
-[[ ${WITH_LDAP_BIND} = "yes" ]] && LDAP_COMMAND_BEGIN="ldapsearch -LLL -H ${LDAP_URL} -D uid=${LDAP_ADMIN_UID},${LDAP_DN_USER_BRANCH},${LDAP_DN_BASE} -w ${LDAP_ADMIN_PASS}"
+echo -e "\nConnecting LDAP at $ldapUrl..."
+[[ ${withLdapBind} = "no" ]] && ldapCommandBegin="ldapsearch -LLL -H ${ldapUrl} -x"
+[[ ${withLdapBind} = "yes" ]] && ldapCommandBegin="ldapsearch -LLL -H ${ldapUrl} -D uid=${ldapAdminUid},${ldapDnUserBranch},${ldapDnBase} -w ${ldapAdminPass}"
 
-${LDAP_COMMAND_BEGIN} -b ${LDAP_DN_USER_BRANCH},${LDAP_DN_BASE} > /dev/null 2>&1
-[ $? -ne 0 ] && error 3 "Problème de connexion au serveur LDAP ${LDAP_URL}.\nVérifiez vos paramètres de connexion."
+${ldapCommandBegin} -b ${ldapDnUserBranch},${ldapDnBase} > /dev/null 2>&1
+[ $? -ne 0 ] && error 3 "Problème de connexion au serveur LDAP ${ldapUrl}.\nVérifiez vos paramètres de connexion."
 
 # Test si l'utilisateur existe dans le ldap
-[[ -z $(${LDAP_COMMAND_BEGIN} -b ${LDAP_DN_USER_BRANCH},${LDAP_DN_BASE} -x uid=${USER_UID}) ]] && error 4 "Aucune correspondance avec l'identifiant ${USER_UID} trouvé dans le LDAP ${LDAP_URL}, dans la branche '${LDAP_DN_USER_BRANCH},${LDAP_DN_BASE}'."
-[[ ! ${FILTER_ON_DOMAIN} == "" ]] && [[ -z $(${LDAP_COMMAND_BEGIN} -b ${LDAP_DN_USER_BRANCH},${LDAP_DN_BASE} -x uid=${USER_UID} mail | grep ${FILTER_ON_DOMAIN}) ]] && error 5 "Aucune correspondance pour ${FILTER_ON_DOMAIN} avec l'identifiant ${USER_UID} trouvé dans le LDAP ${LDAP_URL}, dans la branche '${LDAP_DN_USER_BRANCH},${LDAP_DN_BASE}'."
+[[ -z $(${ldapCommandBegin} -b ${ldapDnUserBranch},${ldapDnBase} -x uid=${userUid}) ]] && error 4 "Aucune correspondance avec l'identifiant ${userUid} trouvé dans le LDAP ${ldapUrl}, dans la branche '${ldapDnUserBranch},${ldapDnBase}'."
+[[ ! ${filterOnDomain} == "" ]] && [[ -z $(${ldapCommandBegin} -b ${ldapDnUserBranch},${ldapDnBase} -x uid=${userUid} mail | grep ${filterOnDomain}) ]] && error 5 "Aucune correspondance pour ${filterOnDomain} avec l'identifiant ${userUid} trouvé dans le LDAP ${ldapUrl}, dans la branche '${ldapDnUserBranch},${ldapDnBase}'."
+
+# Test si le modèle de signature existe
+[[ ! -f ${modele} ]] && error 6 "Le template de signature ${modele} n'existe pas ou n'est pas lisible."
 
 # Test répertoire export
-[[ ! -d ${DIR_EXPORT} ]] && mkdir -p ${DIR_EXPORT}
-[[ ! -d ${DIR_EXPORT} ]] && error 7 "Problème pour accéder au répertoire '${DIR_EXPORT}'."
-[[ ! -w ${DIR_EXPORT} ]] && error 7 "Problème de droits d'accès en écriture au dossier ${DIR_EXPORT}'."
+[[ ! -d ${dirExport} ]] && mkdir -p ${dirExport}
+[[ ! -d ${dirExport} ]] && error 7 "Problème pour accéder au répertoire '${dirExport}'."
+[[ ! -w ${dirExport} ]] && error 7 "Problème de droits d'accès en écriture au dossier ${dirExport}'."
 
+# Test option ModeMapping
+if [[ ! ${modeMapping} == "none" ]] && [[ ! ${modeMapping} == "all" ]] && [[ ! ${modeMapping} == "ALL" ]] && [[ ! ${modeMapping} == "uid" ]] && [[ ! ${modeMapping} == "UID" ]] ; then
+	echo -e "\nVous avez sélectionnée l'option \"-e ${modeMapping}\" hors \"${modeMapping}\" n'est pas un paramètre autorisé."
+	echo -e "Seuls les paramètres \"ALL\", \"all\", \"UID\", \"uid\", \"none\" sont autorisés."
+	echo -e "Pour ne pas bloquer l'exécution du script nous basculons sur l'option \"-e none\"."
+fi
 
 ################################################################################
 # ETAPE 1 : Export variables depuis LDAP
 ################################################################################
 
 # Récupérer les variables nécessaires
-${LDAP_COMMAND_BEGIN} -b ${LDAP_DN_USER_BRANCH},${LDAP_DN_BASE} -x uid=${USER_UID} givenName sn cn title telephoneNumber mobile mail apple-company street postalCode l c apple-imhandle > ${CONTENT_USER_BASE}
+${ldapCommandBegin} -b ${ldapDnUserBranch},${ldapDnBase} -x uid=${userUid} givenName sn cn title telephoneNumber mobile mail apple-company street postalCode l c apple-imhandle resEnJobtTitle > ${contentUserBase}
 
 # Correction to support LDIF splitted lines, thanks to Guillaume Bougard (gbougard@pkg.fr)
-perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${CONTENT_USER_BASE}"
+perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${contentUserBase}"
 
 # Décodage des informations
 OLDIFS=$IFS; IFS=$'\n'
-for LINE in $(cat ${CONTENT_USER_BASE})
+for LINE in $(cat ${contentUserBase})
 do
-	base64decode $LINE >> ${CONTENT_USER}
+	base64decode $LINE >> ${contentUser}
 done
 IFS=$OLDIFS
 
 # Récupération des données depuis le LDAP
-NOMCOMPLET=$(cat ${CONTENT_USER} | grep ^cn: | perl -p -e 's/cn: //g')
-NOM=$(cat ${CONTENT_USER} | grep ^sn: | perl -p -e 's/sn: //g')
-PRENOM=$(cat ${CONTENT_USER} | grep ^givenName: | perl -p -e 's/givenName: //g')
-TITRE=$(cat ${CONTENT_USER} | grep ^title: | perl -p -e 's/title: //g')
+NOMCOMPLET=$(cat ${contentUser} | grep ^cn: | perl -p -e 's/cn: //g')
+NOM=$(cat ${contentUser} | grep ^sn: | perl -p -e 's/sn: //g')
+PRENOM=$(cat ${contentUser} | grep ^givenName: | perl -p -e 's/givenName: //g')
+TITRE=$(cat ${contentUser} | grep ^title: | perl -p -e 's/title: //g')
+ENGLISHTITLE=$(cat ${contentUser} | grep ^resEnJobtTitle: | perl -p -e 's/resEnJobtTitle: //g')
 [[ -z ${NOMCOMPLET} ]] && NOMCOMPLET=$(echo "${PRENOM} ${NOM}")
-COMPANY=$(cat ${CONTENT_USER} | grep ^apple-company: | perl -p -e 's/apple-company: //g')
 
 # Email
 # Si plusieurs emails sont renseignés pour l'utilisateur dans le LDAP on garde prioritairement 
 # celui qui contient l'UID de l'utilisateur 
 # et si le paramètre -d est utilisé on garde prioritairement (si l'un des emails correspond)
 # une adresse email qui contient le nom de domaine renseigné en paramètre
-cat ${CONTENT_USER} | grep ^mail: | perl -p -e 's/mail: //g' > ${LISTE_MAIL}
-LINES_NUMBER=$(cat ${LISTE_MAIL} | grep "." | wc -l)
-if [ ${LINES_NUMBER} -eq 1 ]; then
-	MAIL=$(head -n 1 ${LISTE_MAIL})
-elif [ ${LINES_NUMBER} -gt 1 ]; then
-	if [ -z ${DOMAIN_EMAIL} ]; then
-		cat ${LISTE_MAIL} | grep ${USER_UID} > /dev/null 2>&1
+cat ${contentUser} | grep ^mail: | perl -p -e 's/mail: //g' > ${listeMail}
+linesNumber=$(cat ${listeMail} | grep "." | wc -l)
+if [ ${linesNumber} -eq 1 ]; then
+	EMAIL=$(head -n 1 ${listeMail})
+elif [ ${linesNumber} -gt 1 ]; then
+	if [ -z ${domainEmail} ]; then
+		cat ${listeMail} | grep ${userUid} > /dev/null 2>&1
 		if [ $? -ne 0 ]; then
-			MAIL=$(head -n 1 ${LISTE_MAIL})
+			EMAIL=$(head -n 1 ${listeMail})
 		else
-			MAIL=$(cat ${LISTE_MAIL} | grep ${USER_UID} | head -n 1)
+			EMAIL=$(cat ${listeMail} | grep ${userUid} | head -n 1)
 		fi
 	else
-		cat ${LISTE_MAIL} | grep ${DOMAIN_EMAIL} | grep ${USER_UID} > /dev/null 2>&1
+		cat ${listeMail} | grep ${domainEmail} | grep ${userUid} > /dev/null 2>&1
 		if [ $? -eq 0 ]; then
-			MAIL=$(cat ${LISTE_MAIL} | grep ${DOMAIN_EMAIL} | grep ${USER_UID} | head -n 1)
+			EMAIL=$(cat ${listeMail} | grep ${domainEmail} | grep ${userUid} | head -n 1)
 		else
-			cat ${LISTE_MAIL} | grep ${DOMAIN_EMAIL} > /dev/null 2>&1
+			cat ${listeMail} | grep ${domainEmail} > /dev/null 2>&1
 			if [ $? -eq 0 ]; then
-				MAIL=$(cat ${LISTE_MAIL} | grep ${DOMAIN_EMAIL} | head -n 1)
+				EMAIL=$(cat ${listeMail} | grep ${domainEmail} | head -n 1)
 			else
-				cat ${LISTE_MAIL} | grep ${USER_UID} > /dev/null 2>&1
+				cat ${listeMail} | grep ${userUid} > /dev/null 2>&1
 				if [ $? -eq 0 ]; then
-					MAIL=$(cat ${LISTE_MAIL} | grep ${USER_UID} | head -n 1)
+					EMAIL=$(cat ${listeMail} | grep ${userUid} | head -n 1)
 				else
-					MAIL=$(head -n 1 ${LISTE_MAIL})
+					EMAIL=$(head -n 1 ${listeMail})
 				fi
 			fi
 		fi
 	fi
 fi
-LINES_NUMBER=""
+linesNumber=""
 
 # Skype
 # Si plusieurs login Skype sont renseignés pour l'utilisateur dans le LDAP on garde prioritairement 
@@ -300,33 +436,33 @@ LINES_NUMBER=""
 # et si le paramètre -d est utilisé on garde prioritairement (si l'un des pseudos Skype correspond)
 # un pseudo Skype qui contient le nom de domaine renseigné en paramètre
 OLDIFS=$IFS; IFS=$'\n'
-cat ${CONTENT_USER} | grep ^'apple-imhandle: Skype:' | perl -p -e 's/apple-imhandle: Skype://g' > ${LISTE_SKYPE}
+cat ${contentUser} | grep ^'apple-imhandle: Skype:' | perl -p -e 's/apple-imhandle: Skype://g' > ${listeSkype}
 IFS=$OLDIFS
-LINES_NUMBER=$(cat ${LISTE_SKYPE} | wc -l)
-if [ ${LINES_NUMBER} -eq 1 ]; then
-	SKYPE=$(head -n 1 ${LISTE_SKYPE})
-elif [ ${LINES_NUMBER} -gt 1 ]; then
-	if [ -z ${DOMAIN_EMAIL} ]; then
-		cat ${LISTE_SKYPE} | grep ${USER_UID} > /dev/null 2>&1
+linesNumber=$(cat ${listeSkype} | wc -l)
+if [ ${linesNumber} -eq 1 ]; then
+	SKYPE=$(head -n 1 ${listeSkype})
+elif [ ${linesNumber} -gt 1 ]; then
+	if [ -z ${domainEmail} ]; then
+		cat ${listeSkype} | grep ${userUid} > /dev/null 2>&1
 		if [ $? -ne 0 ]; then
-			SKYPE=$(head -n 1 ${LISTE_SKYPE})
+			SKYPE=$(head -n 1 ${listeSkype})
 		else
-			SKYPE=$(cat ${LISTE_SKYPE} | grep ${USER_UID} | head -n 1)
+			SKYPE=$(cat ${listeSkype} | grep ${userUid} | head -n 1)
 		fi
 	else
-		cat ${LISTE_SKYPE} | grep ${DOMAIN_EMAIL} | grep ${USER_UID} > /dev/null 2>&1
+		cat ${listeSkype} | grep ${domainEmail} | grep ${userUid} > /dev/null 2>&1
 		if [ $? -eq 0 ]; then
-			SKYPE=$(cat ${LISTE_SKYPE} | grep ${DOMAIN_EMAIL} | grep ${USER_UID} | head -n 1)
+			SKYPE=$(cat ${listeSkype} | grep ${domainEmail} | grep ${userUid} | head -n 1)
 		else
-			cat ${LISTE_SKYPE} | grep ${DOMAIN_EMAIL} > /dev/null 2>&1
+			cat ${listeSkype} | grep ${domainEmail} > /dev/null 2>&1
 			if [ $? -eq 0 ]; then
-				SKYPE=$(cat ${LISTE_SKYPE} | grep ${DOMAIN_EMAIL} | head -n 1)
+				SKYPE=$(cat ${listeSkype} | grep ${domainEmail} | head -n 1)
 			else
-				cat ${LISTE_SKYPE} | grep ${USER_UID} > /dev/null 2>&1
+				cat ${listeSkype} | grep ${userUid} > /dev/null 2>&1
 				if [ $? -eq 0 ]; then
-					SKYPE=$(cat ${LISTE_SKYPE} | grep ${USER_UID} | head -n 1)
+					SKYPE=$(cat ${listeSkype} | grep ${userUid} | head -n 1)
 				else
-					SKYPE=$(head -n 1 ${LISTE_SKYPE})
+					SKYPE=$(head -n 1 ${listeSkype})
 				fi
 			fi
 		fi
@@ -349,131 +485,430 @@ function telFormat () {
 
 # Traitement numéro de téléphone direct
 OLDIFS=$IFS; IFS=$'\n'
-for LINE in $(cat ${CONTENT_USER} | grep ^telephoneNumber: | perl -p -e 's/telephoneNumber: //g'| perl -p -e 's/ //g')
+for LINE in $(cat ${contentUser} | grep ^telephoneNumber: | perl -p -e 's/telephoneNumber: //g'| perl -p -e 's/ //g')
 do
-	 telFormat ${LINE} >> ${LISTE_TEL}
+	 telFormat ${LINE} >> ${listeTel}
 done
-LIGNEDIRECTE=$(cat ${LISTE_TEL} | perl -p -e 's/\n/ - /g' | awk 'sub( "...$", "" )')
+LIGNEDIRECTE=$(cat ${listeTel} | perl -p -e 's/\n/ - /g' | awk 'sub( "...$", "" )')
 IFS=$OLDIFS
 
 # Traitement numéro de téléphone portable pro
 OLDIFS=$IFS; IFS=$'\n'
-for LINE in $(cat ${CONTENT_USER} | grep ^mobile: | perl -p -e 's/mobile: //g'| perl -p -e 's/ //g')
+for LINE in $(cat ${contentUser} | grep ^mobile: | perl -p -e 's/mobile: //g'| perl -p -e 's/ //g')
 do
-	 telFormat ${LINE} >> ${LISTE_MOBILE}
+	 telFormat ${LINE} >> ${listeMobile}
 done
-MOBILE=$(cat ${LISTE_MOBILE} | perl -p -e 's/\n/ - /g' | awk 'sub( "...$", "" )')
+MOBILE=$(cat ${listeMobile} | perl -p -e 's/\n/ - /g' | awk 'sub( "...$", "" )')
 IFS=$OLDIFS
 
 ################################################################################
-# ETAPE 2 : Recherche et suppression des signatures équivalentes antérieures
+# ETAPE 2 : Recherche des signatures équivalentes antérieures
 ################################################################################
 
-# Définition de l'emplacement des signatures et du format
-EMPLACEMENT_SIGNATURES=${HOME_DIR%/}/Library/Mail/V2/MailData/Signatures
-LISTE_ANCIENNES_SIGNATURES=$(mktemp /tmp/${SCRIPT_NAME_WITHOUT_EXT}_anciennes_signatures.XXXXX)
-NOMBRE_SIGANTURES_ANCIENNES=0
-[[ ${VERBOSITY} -eq "1" ]] && echo -e "\nNous allons rechercher '${CLEF_IDENTIFIANT} ${MAIL}' dans les signatures pour identifier si une siganture a déjà été générée par ${SCRIPT_NAME}."
-for SIGNATURE in $(find ${EMPLACEMENT_SIGNATURES%/}/ -name "*.mailsignature" -depth 1 -print)
-do
-	[[ ${VERBOSITY} -eq "1" ]] && echo "${SIGNATURE}"
-	GENERATED_BY_THIS_SCRIPT=0
-	grep "${CLEF_IDENTIFIANT} ${MAIL}" ${SIGNATURE} > /dev/null 2>&1
-	[[ $? -eq 0 ]] && echo "${SIGNATURE}" >> ${LISTE_ANCIENNES_SIGNATURES} && let NOMBRE_SIGANTURES_ANCIENNES=${NOMBRE_SIGANTURES_ANCIENNES}+1
-done
+# On crée le dossier de destination s'il n'existe pas
+if [[ ! -d ${emplacementSignatures%/} ]]; then
+	mkdir -p ${emplacementSignatures%/}
+	if [ $? -ne 0 ]; then
+		error 9 "Problème rencontré lors de la création du dossier ${emplacementSignatures%/}"
+	fi
+fi
 
-[[ ${VERBOSITY} -eq "1" ]] && [[ ${NOMBRE_SIGANTURES_ANCIENNES} -ne "0" ]] && echo -e "\nListe ancienne(s) signature(s) :" && cat ${LISTE_ANCIENNES_SIGNATURES}
-[[ ${VERBOSITY} -eq "1" ]] && [[ ${NOMBRE_SIGANTURES_ANCIENNES} -eq "0" ]] && echo -e "\nPas d'ancienne signature correspondante trouvée." 
+# On teste s'il y a des signatures dans le dossier
+ls ${emplacementSignatures%/}/*.mailsignature > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+	[[ ${verbosity} -eq "1" ]] && echo -e "\nNous allons rechercher '${clefIdentifiant} ${EMAIL}' dans les signatures pour identifier si une siganture a déjà été générée par ${scriptName}."
+	for SIGNATURE in $(find ${emplacementSignatures%/} -name "*.mailsignature" -depth 1 -print)
+	do
+		[[ ${verbosity} -eq "1" ]] && echo "${SIGNATURE}"
+		generatedByThisScript=0
+		grep "${clefIdentifiant} ${EMAIL}" ${SIGNATURE} > /dev/null 2>&1
+		[[ $? -eq 0 ]] && echo "${SIGNATURE}" >> ${listeAnciennesSignatures} && let nombreAnciennesSignatures=${nombreAnciennesSignatures}+1
+	done
 
+	[[ ${verbosity} -eq "1" ]] && [[ ${nombreAnciennesSignatures} -gt "0" ]] && echo -e "\nListe ancienne(s) signature(s) :" && cat ${listeAnciennesSignatures}
+	[[ ${verbosity} -eq "1" ]] && [[ ${nombreAnciennesSignatures} -eq "0" ]] && echo -e "\nPas d'ancienne signature générée par notre script n'a été trouvée." 
+else
+	[[ ${verbosity} -eq "1" ]] && echo -e "\nPas de signature trouvée dans le dossier ${emplacementSignatures%/}." 
+fi
 
-# Définition du nom de fichier
-if [[ ${NOMBRE_SIGANTURES_ANCIENNES} -eq "0" ]]; then
+# Définition du nom de fichier, si aucune ancienne signature générée par notre script n'est trouvée.
+if [[ ${nombreAnciennesSignatures} -eq "0" ]]; then
 	# On évite d'écraser un autre fichier
-	NOM_OK=0
-	until [[ ${NOM_OK} -eq "1" ]]
+	nomOk=0
+	until [[ ${nomOk} -eq "1" ]]
 	do
 		UUID=$(uuidgen)
-		NOUVEAU_NOM="${UUID}.mailsignature"
-		[[ ! -e ${EMPLACEMENT_SIGNATURES%/}/${NOUVEAU_NOM} ]] && NOM_OK=1
+		nouveauNom="${UUID}.mailsignature"
+		[[ ! -e ${emplacementSignatures%/}/${nouveauNom} ]] && nomOk=1
 	done
-elif [[ ${NOMBRE_SIGANTURES_ANCIENNES} -eq "1" ]]; then
-	NOUVEAU_NOM="$(echo $(basename $(cat ${LISTE_ANCIENNES_SIGNATURES})))"
-elif [[ ${NOMBRE_SIGANTURES_ANCIENNES} -gt "1" ]]; then
+elif [[ ${nombreAnciennesSignatures} -eq "1" ]]; then
+	nouveauNom="$(echo $(basename $(cat ${listeAnciennesSignatures})))"
+	UUID=$(basename ${nouveauNom} | sed "s/\.mailsignature//g")
+elif [[ ${nombreAnciennesSignatures} -gt "1" ]]; then
 	error 8 "Conflit entre plusieurs anciennes signatures. Utilisez si besoin -v 1 pour augmenter la verbosité et voir quels sont ces fichiers."
 fi
-[[ ${VERBOSITY} -eq "1" ]] && echo -e "\nNom de fichier de la siganture générée :" && echo "${NOUVEAU_NOM}"
+[[ ${verbosity} -eq "1" ]] && echo -e "\nNom de fichier de la siganture générée :" && echo "${nouveauNom}"
 
-cp ${MODELE} ${DIR_EXPORT%/}/${NOUVEAU_NOM}
-cd ${DIR_EXPORT%/}
+################################################################################
+# ETAPE 3 : Modification du template avec les valeurs personnalisées
+################################################################################
 
-# Modifier le fichier source (template signature Mail.app)
-# LIGNE1
-if [[ -z ${TITRE} ]]; then
-	LIGNE1=$(echo "${NOMCOMPLET}")
-elif [[ ! -z ${TITRE} ]]; then
-	LIGNE1=$(echo "${NOMCOMPLET} | ${TITRE}")
+modeleUser=${dirExport%/}/${nouveauNom}
+cd ${dirExport%/}
+
+echo "Content-Transfer-Encoding: quoted-printable" > ${modeleUser}
+echo "Content-Type: text/html;" >> ${modeleUser}
+echo "charset=utf-8" >> ${modeleUser}
+echo "Message-Id: <${UUID}>" >> ${modeleUser}
+echo "${mimeVersion}" >> ${modeleUser}
+echo "" >> ${modeleUser}
+echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\" \"http://www.w3.org/TR/REC-html40/loose.dtd\">" >> ${modeleUser}
+[[ ${versionOsX} -gt 10 ]] && echo "<body>" >> ${modeleUser}
+
+cat ${modele} >> ${modeleUser}
+
+# Ajout de la clé d'identification de la signature générée par notre outil (commentaire HTML)
+echo -e "\n<!-- ${clefIdentifiant} ${EMAIL} -->" >> ${modeleUser}
+
+[[ ${versionOsX} -gt 10 ]] && echo "</body>" >> ${modeleUser}
+
+## PERSONNALISATION
+
+cat ${modeleUser} | perl -p -e "s/NOMCOMPLET/${NOMCOMPLET}/g" > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+
+if [[ -z ${TITRE} ]] ; then
+	cat ${modeleUser} | grep -v TITRE > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+else
+	cat ${modeleUser} | perl -p -e "s/TITRE/${TITRE}/g" > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
 fi
-cat ${NOUVEAU_NOM} | sed "s/LIGNE1/${LIGNE1}/g" > ${NOUVEAU_NOM}.new && mv ${NOUVEAU_NOM} ${NOUVEAU_NOM}.old && mv ${NOUVEAU_NOM}.new ${NOUVEAU_NOM} && rm ${NOUVEAU_NOM}.old
-# LIGNE2
-if [[ -z ${SKYPE} ]]; then
-	[[ -z ${MAIL} ]] && LIGNE2=""
-	[[ ! -z ${MAIL} ]] && LIGNE2=$(echo "${MAIL}")
-elif [[ ! -z ${SKYPE} ]]; then
-	[[ ! -z ${MAIL} ]] && LIGNE2=$(echo "${MAIL} | skype ${SKYPE}")
-	[[ -z ${MAIL} ]] && LIGNE2=$(echo "skype ${SKYPE}")
+
+if [[ -z ${ENGLISHTITLE} ]] ; then
+	cat ${modeleUser} | grep -v ENGLISHTITLE > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+else
+	cat ${modeleUser} | perl -p -e "s/ENGLISHTITLE/${ENGLISHTITLE}/g" > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
 fi
-[[ ! -z ${LIGNE2} ]] && cat ${NOUVEAU_NOM} | sed "s/LIGNE2/${LIGNE2}/g" > ${NOUVEAU_NOM}.new && mv ${NOUVEAU_NOM} ${NOUVEAU_NOM}.old && mv ${NOUVEAU_NOM}.new ${NOUVEAU_NOM} && rm ${NOUVEAU_NOM}.old
-[[ -z ${LIGNE2} ]] && cat ${NOUVEAU_NOM} | sed "/LIGNE2/d" > ${NOUVEAU_NOM}.new && mv ${NOUVEAU_NOM} ${NOUVEAU_NOM}.old && mv ${NOUVEAU_NOM}.new ${NOUVEAU_NOM} && rm ${NOUVEAU_NOM}.old
-# LIGNE3
-if [[ -z ${LIGNEDIRECTE} ]]; then
-	if [[ -z ${MOBILE} ]]; then
-		cat ${NOUVEAU_NOM} | sed "/LIGNE3/d" > ${NOUVEAU_NOM}.new && mv ${NOUVEAU_NOM} ${NOUVEAU_NOM}.old && mv ${NOUVEAU_NOM}.new ${NOUVEAU_NOM} && rm ${NOUVEAU_NOM}.old
-	elif [[ ! -z ${MOBILE} ]]; then
-		LIGNE3=$(echo "mobile ${MOBILE}")
-		cat ${NOUVEAU_NOM} | sed "s/LIGNE3/${LIGNE3}/g" > ${NOUVEAU_NOM}.new && mv ${NOUVEAU_NOM} ${NOUVEAU_NOM}.old && mv ${NOUVEAU_NOM}.new ${NOUVEAU_NOM} && rm ${NOUVEAU_NOM}.old
+
+if [[ -z ${LIGNEDIRECTE} ]] ; then
+	cat ${modeleUser} | grep -v LIGNEDIRECTE > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+else
+	cat ${modeleUser} | perl -p -e "s/LIGNEDIRECTE/${LIGNEDIRECTE}/g" > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+fi
+
+if [[ -z ${MOBILE} ]] ; then
+	cat ${modeleUser} | grep -v MOBILE > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+else
+	cat ${modeleUser} | perl -p -e "s/MOBILE/${MOBILE}/g" > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+fi
+
+if [[ -z ${EMAIL} ]] ; then
+	cat ${modeleUser} | grep -v EMAIL > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+else
+	cat ${modeleUser} | sed "s/EMAIL/${EMAIL}/" | sed "s/EMAIL/${EMAIL}/" > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+fi
+
+if [[ -z ${SKYPE} ]] ; then
+	cat ${modeleUser} | grep -v SKYPE > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+else
+	cat ${modeleUser} | perl -p -e "s/SKYPE/${SKYPE}/g" > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+fi
+
+# Lecture du résultat
+[[ ${verbosity} -eq "1" ]] && echo -e "\nContenu de la signature générée :" && cat ${modeleUser}
+
+# Encodage HTML des accents
+htmlEncode ${modeleUser} > ${modeleUser}.new && mv ${modeleUser} ${modeleUser}.old && mv ${modeleUser}.new ${modeleUser} && rm ${modeleUser}.old
+
+################################################################################
+# ETAPE 4 : Générons le fichier de signature
+################################################################################
+
+# On teste si Mail.app est ouvert et on quitte le cas échéant
+ps cax | grep Mail$ > /dev/null 2>&1 ; codeRetour=$(echo $?)
+if [[ ${codeRetour} -eq "0" ]]; then
+	[[ ${verbosity} -eq "1" ]] && echo -e "\nMail.app est ouvert, nous quittons avant de poursuivre."
+	while [[ ${codeRetour} -eq "0" ]]
+	do
+		pidMail=$(ps cax | grep Mail$ | grep -o '^[ ]*[0-9]*' | tr -d '\r\n' | sed "s/ //g")
+	    kill ${pidMail}
+	    sleep 1
+	    ps cax | grep Mail$ > /dev/null 2>&1 ; codeRetour=$(echo $?)
+	done
+fi
+
+# On vérifie avec un hash MD5 si la signature générée est différente de celle déjà présente
+if [[ ${nombreAnciennesSignatures} -eq "0" ]]; then
+	if [[ -f ${emplacementSignatures%/}/${nouveauNom} ]]; then
+		chflags -R nouchg ${emplacementSignatures%/}/${nouveauNom}
+		rm -R ${emplacementSignatures%/}/${nouveauNom}
+	fi 
+	mv ${nouveauNom} ${emplacementSignatures%/}/
+elif [[ ${nombreAnciennesSignatures} -eq "1" ]]; then
+	# On teste le hash MD5 de l'ancienne signature
+	oldMD5=$(md5 ${emplacementSignatures%/}/${nouveauNom} | sed "s/ //g" | awk -F '=' '{print $(NF)}')
+	newMD5=$(md5 ${nouveauNom} | sed "s/ //g" | awk -F '=' '{print $(NF)}')
+	echo ${oldMD5} | grep ${newMD5} > /dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		[[ ${verbosity} -eq "1" ]] && echo -e "\nLe hash MD5 de la nouvelle signature HTML générée est différent de celle déjà présente, nous allons donc la remplacer."
+		if [[ -f ${emplacementSignatures%/}/${nouveauNom} ]]; then
+			chflags -R nouchg ${emplacementSignatures%/}/${nouveauNom}
+			rm -R ${emplacementSignatures%/}/${nouveauNom}
+		fi 
+		mv ${nouveauNom} ${emplacementSignatures%/}/
+	else 
+		[[ ${verbosity} -eq "1" ]] && echo -e "\nLe hash MD5 de la nouvelle signature HTML générée est identique à celui de celle déjà présente, nous ne faisons aucune modification."
+		rm ${nouveauNom}
 	fi
+elif [[ ${nombreAnciennesSignatures} -gt "1" ]]; then
+	error 8 "Conflit entre plusieurs anciennes signatures. Utilisez si besoin -v 1 pour augmenter la verbosité et voir quels sont ces fichiers."
 fi
-if [[ ! -z ${LIGNEDIRECTE} ]]; then
-	if [[ -z ${MOBILE} ]]; then
-		LIGNE3=$(echo "tel ${LIGNEDIRECTE}")
-		cat ${NOUVEAU_NOM} | sed "s/LIGNE3/${LIGNE3}/g" > ${NOUVEAU_NOM}.new && mv ${NOUVEAU_NOM} ${NOUVEAU_NOM}.old && mv ${NOUVEAU_NOM}.new ${NOUVEAU_NOM} && rm ${NOUVEAU_NOM}.old
-	elif [[ ! -z ${MOBILE} ]]; then
-		LIGNE3=$(echo "tel ${LIGNEDIRECTE} | mobile ${MOBILE}")
-		cat ${NOUVEAU_NOM} | sed "s/LIGNE3/${LIGNE3}/g" > ${NOUVEAU_NOM}.new && mv ${NOUVEAU_NOM} ${NOUVEAU_NOM}.old && mv ${NOUVEAU_NOM}.new ${NOUVEAU_NOM} && rm ${NOUVEAU_NOM}.old
+
+chflags uchg ${emplacementSignatures%/}/${nouveauNom}
+
+
+cd ${homeDir%/}
+
+################################################################################
+# ETAPE 5 : On enregistre la signature dans le fichier de préférences AllSignatures.plist 
+################################################################################
+
+allSignaturesPlistFile=${emplacementSignatures%/}/AllSignatures.plist
+allSignaturesPlistFileNew=${dirExport%/}/AllSignatures.plist
+
+# Pour travailler sur les fichiers plist, on les converti en XML si besoin
+# On vérouille le fichier pour les utilisations futures
+[[ -f ${allSignaturesPlistFile} ]] && chflags nouchg ${allSignaturesPlistFile}
+[[ -f ${allSignaturesPlistFile} ]] && plutil -convert xml1 ${allSignaturesPlistFile}
+[[ -f ${allSignaturesPlistFile} ]] && chflags nouchg ${allSignaturesPlistFile}
+
+# On teste si le fichier AllSignatures.plist n'existe pas et on le créee
+if [[ ! -e ${allSignaturesPlistFile} ]]; then
+	touch ${allSignaturesPlistFile}
+	echo '<?xml version="1.0" encoding="UTF-8"?>' > ${allSignaturesPlistFile}
+	echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> ${allSignaturesPlistFile}
+	echo '<plist version="1.0">' >> ${allSignaturesPlistFile}
+	echo '<array>' >> ${allSignaturesPlistFile}
+	echo '</array>' >> ${allSignaturesPlistFile}
+	echo '</plist>' >> ${allSignaturesPlistFile}
+fi
+
+xmllint --xpath '/plist/array/dict/string' ${allSignaturesPlistFile} | perl -p -e 's/<string>//g' | perl -p -e 's/<\/string>/\n/g' | grep '^[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*$' | grep "${UUID}" > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+	[[ ${verbosity} -eq "1" ]] && echo -e "\nLa signature est déjà enregistrée dans le fichier ${emplacementSignatures%/}/AllSignatures.plist."
+else
+	[[ ${verbosity} -eq "1" ]] && echo -e "\nOn ajoute la signature dans le fichier de préférences ${emplacementSignatures%/}/AllSignatures.plist."
+	numLigneMailSignature=$(sed -n '/<array>/=' ${allSignaturesPlistFile})
+	numLignesTotales=$(awk 'END {print NR}' ${allSignaturesPlistFile})
+	head -n ${numLigneMailSignature} ${allSignaturesPlistFile} > ${allSignaturesPlistFileNew}
+	echo "<dict>" >> ${allSignaturesPlistFileNew}
+	echo "<key>SignatureIsRich</key>" >> ${allSignaturesPlistFileNew}
+	echo "<true/>" >> ${allSignaturesPlistFileNew}
+	echo "<key>SignatureName</key>" >> ${allSignaturesPlistFileNew}
+	echo "<string>${NOMCOMPLET} - AutoGen</string>" >> ${allSignaturesPlistFileNew}
+	echo "<key>SignatureUniqueId</key>" >> ${allSignaturesPlistFileNew}
+	echo "<string>${UUID}</string>" >> ${allSignaturesPlistFileNew}
+	echo "</dict>" >> ${allSignaturesPlistFileNew}
+	tail -n $(($numLignesTotales-$numLigneMailSignature)) ${allSignaturesPlistFile} >> ${allSignaturesPlistFileNew}
+	xmllint --format ${allSignaturesPlistFileNew} > ${allSignaturesPlistFileNew}.new && mv ${allSignaturesPlistFileNew} ${allSignaturesPlistFileNew}.old && mv ${allSignaturesPlistFileNew}.new ${allSignaturesPlistFileNew} && rm ${allSignaturesPlistFileNew}.old
+
+	# On utilise la fonction testMailOpenAndQuit pour quitter automatiquement Mail.app si l'application est ouverte
+	testMailOpenAndQuit
+
+	rm ${allSignaturesPlistFile} && mv ${allSignaturesPlistFileNew} ${allSignaturesPlistFile}
+
+	# On vérouille le fichier pour les utilisations futures
+	chflags uchg ${allSignaturesPlistFile}
+fi
+
+################################################################################
+# ETAPE 6 : On fait le mapping dans le fichier de préférences AccountsMap.plist
+################################################################################
+
+# On quitte si l'option "-e none" est sélectionnée ou si l'option "-e" n'est pas activée
+[[ ${modeMapping} == "none" ]] && alldone 0
+
+accountSignaturesMapPlist=${emplacementSignatures%/}/AccountsMap.plist
+
+# On utilise la fonction testMailOpenAndQuit pour quitter automatiquement Mail.app si l'application est ouverte
+testMailOpenAndQuit
+
+# Par sécurité on attend quelques secondes
+sleep 3
+
+# On dévérouille les fichiers XML pour travailler dessus
+[[ -f ${plistFileMail} ]] && chflags nouchg ${plistFileMail}
+[[ -f ${accountSignaturesMapPlist} ]] && chflags nouchg ${accountSignaturesMapPlist}
+
+# Pour travailler sur les fichiers plist on les converti en XML si besoin
+[[ -f ${plistFileMail} ]] && plutil -convert xml1 ${plistFileMail}
+##[[ -f ${accountSignaturesMapPlist} ]] && plutil -convert xml1 {accountSignaturesMapPlist}
+
+# On crée le fichier de mapping s'il n'existe pas
+if [[ ! -f ${accountSignaturesMapPlist} ]] || [[ -z $(cat ${accountSignaturesMapPlist}) ]]; then
+	if [[ -z $(cat ${plistFileMail}) ]] ; then
+		error 7 "Le fichier de configuration des signatures ${accountSignaturesMapPlist} n'existait pas et il a été impossible de le créer, car le fichier de configuration des comptes email ${plistFileMail} semble vide ou inexistant."
 	fi
+	# On détecte les UUID des comptes email paramétrés dans le fichier ${plistFileMail}
+	emailAccountsUuids=$(/usr/libexec/PlistBuddy ${plistFileMail} -c "print :MailSections" | sed "s/ //g" | grep '[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*' | grep 'pop\|imap' )
+	[[ -z ${emailAccountsUuids} ]] && error 7 "Le fichier de configuration des signatures ${accountSignaturesMapPlist} n'existait pas et il a été impossible de le créer, car aucun compte email n'a été détecté dans ${plistFileMail}."
+	# On créé le début du fichier plist
+	touch ${accountSignaturesMapPlist}
+	echo '<?xml version="1.0" encoding="UTF-8"?>' > ${accountSignaturesMapPlist}
+	echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> ${accountSignaturesMapPlist}
+	echo '<plist version="1.0">' >> ${accountSignaturesMapPlist}
+	echo '<dict>' >> ${accountSignaturesMapPlist}
+	for emailUUID in ${emailAccountsUuids}
+	do
+		onlyUUIDemail=$(echo ${emailUUID} | sed 's/\///g' | awk -F ':' '{print $(NF)}')
+		echo "<key>${onlyUUIDemail}</key>" >> ${accountSignaturesMapPlist}
+		echo '<dict>' >> ${accountSignaturesMapPlist}
+		echo '<key>AccountURL</key>' >> ${accountSignaturesMapPlist}
+		echo "<string>${emailUUID}</string>" >> ${accountSignaturesMapPlist}
+		echo '<key>Signatures</key>' >> ${accountSignaturesMapPlist}
+		echo '<array>' >> ${accountSignaturesMapPlist}
+		echo '</array>' >> ${accountSignaturesMapPlist}
+		echo '</dict>' >> ${accountSignaturesMapPlist}
+	done
+	echo '</dict>' >> ${accountSignaturesMapPlist}
+	echo '</plist>' >> ${accountSignaturesMapPlist}
+	xmllint --format ${accountSignaturesMapPlist} > ${accountSignaturesMapPlist}.new && mv ${accountSignaturesMapPlist} ${accountSignaturesMapPlist}.old && mv ${accountSignaturesMapPlist}.new ${accountSignaturesMapPlist} && rm ${accountSignaturesMapPlist}.old
 fi
-# LIGNE 4
-if [[ ! -z ${COMPANY} ]]; then
-	cat ${NOUVEAU_NOM} | sed "s/LIGNE4/${COMPANY}/g" > ${NOUVEAU_NOM}.new && mv ${NOUVEAU_NOM} ${NOUVEAU_NOM}.old && mv ${NOUVEAU_NOM}.new ${NOUVEAU_NOM} && rm ${NOUVEAU_NOM}.old
-elif [[ -z ${COMPANY} ]]; then
-	cat ${NOUVEAU_NOM} | sed "s/LIGNE4/Réseau en scène Languedoc-Roussillon/g" > ${NOUVEAU_NOM}.new && mv ${NOUVEAU_NOM} ${NOUVEAU_NOM}.old && mv ${NOUVEAU_NOM}.new ${NOUVEAU_NOM} && rm ${NOUVEAU_NOM}.old
+
+# On liste les comptes emails qui pré-existent dans le fichier de mapping
+listeEmailAccountsPlist=$(xmllint --xpath '/plist/dict/key' ${accountSignaturesMapPlist} | perl -p -e 's/<key>//g' | perl -p -e 's/<\/key>/\n/g' | grep '^[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*$')	
+
+# Si aucun compte email 
+[[ -z ${listeEmailAccountsPlist} ]] && error 7 "Aucun compte email paramétré dans ${accountSignaturesMapPlist}." 
+
+# On traite les cas ALL et all / uid et UID dans le fichier de mapping
+for emailAccountUuid in ${listeEmailAccountsPlist}
+do
+	numberOfAlreadyRegisteredSignatures=0
+	numberOfSignatureToAdd=0
+	emailAccountDescription=$(/usr/libexec/PlistBuddy ${accountSignaturesMapPlist} -c "print :${emailAccountUuid}:AccountURL" | sed "s/ //g" )
+	# Test si la signature est déjà enregistréee
+	/usr/libexec/PlistBuddy ${accountSignaturesMapPlist} -c "print :${emailAccountUuid}" | sed "s/ //g" | grep '^[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*$' | grep ${UUID} > /dev/null 2>&1
+	if [ $? -eq 0 ]; then
+		[[ ${verbosity} -eq "1" ]] && echo -e "\nLa signature est déjà enregistrée dans ${accountSignaturesMapPlist} pour la boite mail ${emailAccountDescription}."
+	else
+		[[ ${verbosity} -eq "1" ]] && echo -e "\nOn ajoute la référence à la signature ${UUID} pour la boite mail ${emailAccountDescription} dans le fichier de préférences ${accountSignaturesMapPlist}."
+
+		# On teste si l'entrée signature existe
+		/usr/libexec/PlistBuddy ${accountSignaturesMapPlist} -c "print :${emailAccountUuid}:Signatures" > /dev/null 2>&1
+		if [ $? -ne 0 ]; then
+			[[ ${verbosity} -eq "1" ]] && echo -e "\nOn ajoute avec PlistBuddy l'entrée :${emailAccountUuid}:Signatures dans ${accountSignaturesMapPlist}"
+			/usr/libexec/PlistBuddy ${accountSignaturesMapPlist} -c "add :${emailAccountUuid}:Signatures array"
+		else
+			echo "OK"
+		fi
+
+		# Nombre de signatures déjà enregistrées
+		numberOfAlreadyRegisteredSignatures=$(/usr/libexec/PlistBuddy ${accountSignaturesMapPlist} -c "print :${emailAccountUuid}:Signatures" | sed "s/ //g" | grep '^[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*$' | awk 'END {print NR}')
+		numberOfSignatureToAdd=$(( ${numberOfAlreadyRegisteredSignatures}+1 ))
+
+		if [[ ${modeMapping} == "uid" ]] || [[ ${modeMapping} == "UID" ]] ; then
+			# On teste si la description contient d'UID de l'utilisateur
+			echo ${emailAccountDescription} | grep ${userUid} > /dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				[[ ${verbosity} -eq "1" ]] && echo -e "\nVous avez sélectionné l'option \"-e ${modeMapping}\" et le compte email ${emailAccountDescription} semble contenir votre UID.\nNous ajoutons le lien de votre signature."
+				/usr/libexec/PlistBuddy ${accountSignaturesMapPlist} -c "add :${emailAccountUuid}:Signatures array"
+			fi
+		fi
+		if [[ ${modeMapping} == "all" ]] || [[ ${modeMapping} == "ALL" ]] ; then
+			/usr/libexec/PlistBuddy ${accountSignaturesMapPlist} -c "add :${emailAccountUuid}:Signatures:${numberOfSignatureToAdd} string ${UUID}"
+		fi
+	fi
+done
+
+# On travaille désormaius sur le PLIST plistFileMail
+# On teste si <key>SignatureSelectionMethods</key> existe
+/usr/libexec/PlistBuddy ${plistFileMail} -c "print :SignatureSelectionMethods" > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+	[[ ${verbosity} -eq "1" ]] && echo -e "\nOn ajoute avec PlistBuddy l'entrée :SignatureSelectionMethods dans ${plistFileMail}."
+	/usr/libexec/PlistBuddy ${plistFileMail} -c "add :SignatureSelectionMethods dict"
+fi	
+
+emailAccountsUuids=$(/usr/libexec/PlistBuddy ${plistFileMail} -c "print :MailSections" | sed "s/ //g" | grep '[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*' | grep 'pop\|imap' )
+
+# On ajoute l'information dans plistFileMail > SignatureSelectionMethods
+if [[ ${modeMapping} == "all" ]] || [[ ${modeMapping} == "ALL" ]] ; then
+	# Pour chaque compte email de plistFileMail
+	for emailAccountUuid in $(echo ${emailAccountsUuids} | sed 's/\///g' | awk -F ':' '{print $(NF)}')
+	do
+		/usr/libexec/PlistBuddy ${plistFileMail} -c "print :SignatureSelectionMethods:${emailAccountUuid}" > /dev/null 2>&1
+		if [ $? -ne 0 ]; then
+			[[ ${verbosity} -eq "1" ]] && echo -e "\nOn ajoute avec PlistBuddy l'entrée :SignatureSelectionMethods:${emailAccountUuid} SelectedOnly dans ${plistFileMail}."
+			/usr/libexec/PlistBuddy ${plistFileMail} -c "add :SignatureSelectionMethods:${emailAccountUuid} string"
+			/usr/libexec/PlistBuddy ${plistFileMail} -c "set :SignatureSelectionMethods:${emailAccountUuid} SelectedOnly"
+		else
+			[[ ${verbosity} -eq "1" ]] && echo -e "\nVotre fichier ${plistFileMail} contient déjà l'entrée :SignatureSelectionMethods:${emailAccountUuid} SelectedOnly."
+		fi
+	done
 fi
-echo -e "\n<!-- ${CLEF_IDENTIFIANT} ${MAIL} -->" >> ${NOUVEAU_NOM}
+if [[ ${modeMapping} == "uid" ]] || [[ ${modeMapping} == "UID" ]] ; then
+	for emailAccountUuid in ${listeEmailAccountsPlist}
+	do
+		emailAccountDescription=$(/usr/libexec/PlistBuddy ${accountSignaturesMapPlist} -c "print :${emailAccountUuid}:AccountURL" | sed "s/ //g" )
+		echo ${emailAccountDescription} | grep ${userUid} > /dev/null 2>&1
+		if [ $? -eq 0 ]; then
+			[[ ${verbosity} -eq "1" ]] && echo -e "\nVous avez sélectionné l'option \"-e ${modeMapping}\" et le compte email ${emailAccountDescription} semble contenir votre UID.\nNous ajoutons le lien de votre signature."
+			/usr/libexec/PlistBuddy ${plistFileMail} -c "print :SignatureSelectionMethods:${emailAccountUuid}" > /dev/null 2>&1
+			if [ $? -ne 0 ]; then
+				[[ ${verbosity} -eq "1" ]] && echo -e "\nOn ajoute avec PlistBuddy l'entrée :SignatureSelectionMethods:${emailAccountUuid} SelectedOnly dans ${plistFileMail}"
+				/usr/libexec/PlistBuddy ${plistFileMail} -c "add :SignatureSelectionMethods:${emailAccountUuid} string"
+				/usr/libexec/PlistBuddy ${plistFileMail} -c "set :SignatureSelectionMethods:${emailAccountUuid} SelectedOnly"
+			else
+				[[ ${verbosity} -eq "1" ]] && echo -e "\nVotre fichier ${plistFileMail} contient déjà :SignatureSelectionMethods:${emailAccountUuid} SelectedOnly."
+			fi
+		fi
+	done
+fi
 
-################################################################################
-# ETAPE 3 : Générons le fichier de signature
-################################################################################
+# On ajoute l'information dans plistFileMail > SignaturesSelected (signature sélectionnée par défaut)
+# On teste si <key>SignaturesSelected</key> existe
+/usr/libexec/PlistBuddy ${plistFileMail} -c "print :SignaturesSelected" > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+	[[ ${verbosity} -eq "1" ]] && echo -e "\nOn ajoute avec PlistBuddy l'entrée :SignaturesSelected dans ${plistFileMail}."
+	/usr/libexec/PlistBuddy ${plistFileMail} -c "add :SignaturesSelected dict"
+fi	
+for emailAccountUuid in ${listeEmailAccountsPlist}
+do
+	addDefaultSignature=0
+	emailAccountDescription=$(/usr/libexec/PlistBuddy ${accountSignaturesMapPlist} -c "print :${emailAccountUuid}:AccountURL" | sed "s/ //g" )
+	# Test si la signature est déjà enregistréee
+	/usr/libexec/PlistBuddy ${plistFileMail} -c "print :SignaturesSelected" | sed "s/ //g" | grep '^[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*=[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*$' | grep ${emailAccountUuid}=${UUID} > /dev/null 2>&1
+	if [ $? -eq 0 ]; then
+		[[ ${verbosity} -eq "1" ]] && echo -e "\nL'entrée :SignaturesSelected ${emailAccountUuid}=${UUID} est déjà renseignée dans le fichier ${plistFileMail}."
+	else
 
-[[ ${VERBOSITY} -eq "1" ]] && echo -e "\nContenu de la signature générée :" && cat ${NOUVEAU_NOM}
+		if [[ ${modeMapping} == "UID" ]]; then
+			# On teste si la description contient d'UID de l'utilisateur
+			echo ${emailAccountDescription} | grep ${userUid} > /dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				[[ ${verbosity} -eq "1" ]] && echo -e "\nVous avez sélectionné l'option \"-e ${modeMapping}\" et le compte email ${emailAccountDescription} semble contenir votre UID.\nNous ajoutons le lien de votre signature par défaut dans le fichier ${plistFileMail}."
+				addDefaultSignature=1
+			fi
+		fi
+		if [[ ${modeMapping} == "ALL" ]]; then
+			addDefaultSignature=1
+		fi
 
-if [[ -f ${EMPLACEMENT_SIGNATURES%/}/${NOUVEAU_NOM} ]]; then
-	chflags -R nouchg ${EMPLACEMENT_SIGNATURES%/}/${NOUVEAU_NOM}
-	rm -R ${EMPLACEMENT_SIGNATURES%/}/${NOUVEAU_NOM}
-fi 
-mv ${NOUVEAU_NOM} ${EMPLACEMENT_SIGNATURES%/}/
-chflags uchg ${EMPLACEMENT_SIGNATURES%/}/${NOUVEAU_NOM}
+		if [[ ${addDefaultSignature} -eq 1 ]]; then
+			# On teste si :SignaturesSelected ${emailAccountUuid} et s'il faut juste le modifier, ou le créer complètement
+			/usr/libexec/PlistBuddy ${plistFileMail} -c "print :SignaturesSelected:${emailAccountUuid}" > /dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				[[ ${verbosity} -eq "1" ]] && echo -e "\nOn modifie l'entrée :SignaturesSelected ${emailAccountUuid}=${UUID} dans le fichier ${plistFileMail}."
+				/usr/libexec/PlistBuddy ${plistFileMail} -c "set :SignaturesSelected:${emailAccountUuid} ${UUID}"
+			else
+				[[ ${verbosity} -eq "1" ]] && echo -e "\nOn crée l'entrée :SignaturesSelected ${emailAccountUuid}=${UUID} dans le fichier ${plistFileMail}."
+				/usr/libexec/PlistBuddy ${plistFileMail} -c "add :SignaturesSelected:${emailAccountUuid} string"
+				/usr/libexec/PlistBuddy ${plistFileMail} -c "set :SignaturesSelected:${emailAccountUuid} ${UUID}"
+			fi
+		fi
+	fi
+done
 
-################################################################################
-# ETAPE 4 : Fichiers XML
-################################################################################
-
-UUID_SIGNTAURES_ENREGISTREES=$(xmllint --xpath '/plist/array/dict/string' ${EMPLACEMENT_SIGNATURES%/}/AllSignatures.plist | perl -p -e 's/<string>//g' | perl -p -e 's/<\/string>/\n/g' | grep '^[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*$')
-echo "${NOUVEAU_NOM%.mailsignature}" 
-# Si la signature n'est pas enregistrée, on l'ajout
-
-
-[[ $(ps -Av | grep -i Mail.app | sed "/grep -i Mail.app/d" | wc -l) -gt 0 ]] && killall Mail && sleep 3 && open -a Mail
-
-cd ${HOME_DIR%/}
+# On vérouille le fichier XML
+chflags uchg ${accountSignaturesMapPlist}
+chflags uchg ${plistFileMail}
 
 alldone 0

@@ -45,7 +45,7 @@ listeAnciennesSignatures=$(mktemp /tmp/${scriptNameWithoutExt}_anciennes_signatu
 [[ ${versionOsX} -eq 12 ]] && mimeVersion="Mime-Version: 1.0 (Mac OS X Mail 9.0 \(3093\))"
 [[ ${versionOsX} -eq 13 ]] && mimeVersion="Mime-version: 1.0 (Mac OS X Mail 11.5 \(3445.9.1\))"
 [[ ${versionOsX} -eq 14 ]] && mimeVersion="Mime-version: 1.0 (Mac OS X Mail 12.0 \(3445.100.39\))"
-[[ ${versionOsX} -eq 15 ]] && mimeVersion="Mime-version: 1.0 (Mac OS X Mail 12.0 \(3445.100.39\))"
+[[ ${versionOsX} -eq 15 ]] && mimeVersion="Mime-Version: 1.0 (Mac OS X Mail 13.0 \(3608.60.0.2.5\))"
 # Définition de l'emplacement des signatures et du format
 [[ ${versionOsX} -eq 8 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V2/MailData/Signatures
 [[ ${versionOsX} -eq 9 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V2/MailData/Signatures
@@ -54,10 +54,11 @@ listeAnciennesSignatures=$(mktemp /tmp/${scriptNameWithoutExt}_anciennes_signatu
 [[ ${versionOsX} -eq 12 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V4/MailData/Signatures
 [[ ${versionOsX} -eq 13 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V5/MailData/Signatures
 [[ ${versionOsX} -eq 14 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V6/MailData/Signatures
-[[ ${versionOsX} -eq 15 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V6/MailData/Signatures
+[[ ${versionOsX} -eq 15 ]] && emplacementSignatures=${homeDir%/}/Library/Mail/V7/MailData/Signatures
 # Définition de l'emplacement du plist général de Mail
 [[ ${versionOsX} -eq 13 ]] && plistFileMail=${homeDir%/}/Library/Containers/com.apple.mail/Data/Library/Preferences/com.apple.mail.plist
 [[ ${versionOsX} -eq 14 ]] && plistFileMail=${homeDir%/}/Library/Containers/com.apple.mail/Data/Library/Preferences/com.apple.mail.plist
+[[ ${versionOsX} -eq 15 ]] && plistFileMail=${homeDir%/}/Library/Containers/com.apple.mail/Data/Library/Preferences/com.apple.mail.plist
 
 help () {
 	echo -e "$version\n"
@@ -556,7 +557,11 @@ fi
 modeleUser=${dirExport%/}/${nouveauNom}
 cd ${dirExport%/}
 
-echo "Content-Transfer-Encoding: quoted-printable" > ${modeleUser}
+if [[ ${versionOsX} -gt 14 ]]; then
+	echo "Content-Transfer-Encoding: 7bit" > ${modeleUser}
+else
+	echo "Content-Transfer-Encoding: quoted-printable" > ${modeleUser}
+fi
 echo "Content-Type: text/html;" >> ${modeleUser}
 echo "charset=utf-8" >> ${modeleUser}
 echo "Message-Id: <${UUID}>" >> ${modeleUser}
@@ -819,7 +824,7 @@ do
 	fi
 done
 
-# On travaille désormaius sur le PLIST plistFileMail
+# On travaille désormais sur le PLIST plistFileMail
 # On teste si <key>SignatureSelectionMethods</key> existe
 /usr/libexec/PlistBuddy ${plistFileMail} -c "print :SignatureSelectionMethods" > /dev/null 2>&1
 if [ $? -ne 0 ]; then
